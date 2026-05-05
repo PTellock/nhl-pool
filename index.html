@@ -424,30 +424,7 @@ function updateRoleBadge(){
 }
 
 /* ── Infer next round ── */
-function inferNextRound(ri){
-  if(ri>=3) return;
-  const curr = state.rounds[ri], next = state.rounds[ri+1];
-  if(!curr.matchups.length || !curr.matchups.every(m=>m.winner)) return;
-  const newM = [];
-  for(let i=0;i<curr.matchups.length;i+=2){
-    if(i+1>=curr.matchups.length) break;
-    const m1=curr.matchups[i], m2=curr.matchups[i+1];
-    const t1=m1.winner, t2=m2.winner;
-    const s1=t1===m1.fav?m1.favSeed:m1.dogSeed;
-    const s2=t2===m2.fav?m2.favSeed:m2.dogSeed;
-    let fav=t1,favSeed=s1,dog=t2,dogSeed=s2;
-    if(s2<s1){fav=t2;favSeed=s2;dog=t1;dogSeed=s1;}
-    const ex=next.matchups[newM.length];
-    newM.push(ex&&ex.fav===fav&&ex.dog===dog ? ex : {fav,favSeed,dog,dogSeed,winner:null,lockTime:null});
-  }
-  const key=arr=>arr.map(m=>m.fav+'|'+m.dog).join(',');
-  if(key(next.matchups)!==key(newM)){
-    next.matchups=newM; next.picks={};
-    state.participants.forEach(p=>{next.picks[p]=newM.map(()=>null);});
-  } else {
-    state.participants.forEach(p=>{if(!next.picks[p])next.picks[p]=newM.map(()=>null);});
-  }
-}
+/* inferNextRound removed - admin sets matchups manually */
 
 function getAllTeams(){
   const t=new Set();
@@ -534,7 +511,6 @@ function setCupWinner(team){
 
 /* ── Render bracket ── */
 function renderBracket(){
-  for(let ri=0;ri<4;ri++) inferNextRound(ri);
   const gridClass=['r1-grid','r2-grid','r3-grid','rf-grid'];
   let html='';
   for(let ri=0;ri<4;ri++){
@@ -683,50 +659,38 @@ function renderAdmin(){
 
   for(let ri=0;ri<4;ri++){
     const r=state.rounds[ri];
-    if(ri>0&&r.matchups.length===0) continue;
-    html+=`<div style="margin-bottom:16px">`;
+    const maxSeries=ri===0?8:4;
+    html+=`<div style="margin-bottom:20px">`;
     html+=`<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">${ROUNDS[ri]}</div>`;
-    if(ri===0){
-      html+=`<div class="setup-grid">`;
-      for(let mi=0;mi<8;mi++){
-        const m=r.matchups[mi]||{fav:'',favSeed:'',dog:'',dogSeed:'',lockTime:null};
-        const lockVal=m.lockTime?m.lockTime.slice(0,16):'';
-        html+=`<div class="setup-matchup"><div class="setup-matchup-title">Series ${mi+1}</div>`;
-        html+=`<div class="input-row"><span class="input-label">Fav</span><input type="number" class="seed-in" min="1" max="8" value="${m.favSeed||''}" placeholder="#" id="r0s${mi}s1"><input type="text" class="team-in" value="${m.fav||''}" placeholder="Team" id="r0s${mi}t1"></div>`;
-        html+=`<div class="input-row"><span class="input-label">Dog</span><input type="number" class="seed-in" min="1" max="8" value="${m.dogSeed||''}" placeholder="#" id="r0s${mi}s2"><input type="text" class="team-in" value="${m.dog||''}" placeholder="Team" id="r0s${mi}t2"></div>`;
-        html+=`<div class="input-row"><span class="input-label">Lock</span><input type="datetime-local" class="lock-in" value="${lockVal}" id="r0s${mi}lock"></div>`;
+    html+=`<div class="setup-grid">`;
+    for(let mi=0;mi<maxSeries;mi++){
+      const m=r.matchups[mi]||{fav:'',favSeed:'',dog:'',dogSeed:'',winner:null,lockTime:null};
+      const lockVal=m.lockTime?m.lockTime.slice(0,16):'';
+      const status=lockStatus(m);
+      html+=`<div class="setup-matchup"><div class="setup-matchup-title">Series ${mi+1}</div>`;
+      if(ri>0){
+        html+=`<div style="font-size:11px;margin-bottom:6px">`;
+        if(m.winner) html+=`<span class="badge complete">&#10003; ${m.winner}</span>`;
+        else if(status==='locked') html+=`<span class="badge locked">Locked</span>`;
+        else if(m.lockTime) html+=`<span class="badge open">Open</span>`;
+        else if(m.fav) html+=`<span class="badge open">No lock set</span>`;
+        html+=`</div>`;
+      }
+      html+=`<div class="input-row"><span class="input-label">Fav</span><input type="number" class="seed-in" min="1" max="8" value="${m.favSeed||''}" placeholder="#" id="r${ri}s${mi}s1"><input type="text" class="team-in" value="${m.fav||''}" placeholder="Team" id="r${ri}s${mi}t1"></div>`;
+      html+=`<div class="input-row"><span class="input-label">Dog</span><input type="number" class="seed-in" min="1" max="8" value="${m.dogSeed||''}" placeholder="#" id="r${ri}s${mi}s2"><input type="text" class="team-in" value="${m.dog||''}" placeholder="Team" id="r${ri}s${mi}t2"></div>`;
+      html+=`<div class="input-row"><span class="input-label">Lock</span><input type="datetime-local" class="lock-in" value="${lockVal}" id="r${ri}s${mi}lock"></div>`;
+      if(ri>0&&m.fav){
+        html+=`<div class="input-row"><span class="input-label">Winner</span>`;
+        html+=`<button class="btn sm${m.winner===m.fav?' primary':''}" onclick="toggleWinner(${ri},${mi},'${esc(m.fav)}')">${m.fav}</button>`;
+        html+=`<button class="btn sm${m.winner===m.dog?' primary':''}" onclick="toggleWinner(${ri},${mi},'${esc(m.dog)}')">${m.dog}</button>`;
+        if(m.winner) html+=`<button class="btn sm" onclick="toggleWinner(${ri},${mi},'${esc(m.winner)}')" style="color:var(--text3)">clear</button>`;
         html+=`</div>`;
       }
       html+=`</div>`;
-      html+=`<button class="btn primary" onclick="saveR1Matchups()">Save Round 1</button>`;
-      html+=`<div style="font-size:11px;color:var(--text3);margin-top:4px">Saving Round 1 matchups resets all later rounds and picks.</div>`;
-    } else {
-      // Later rounds - just lock times (matchups auto-generated)
-      if(r.matchups.length===0){
-        html+=`<div style="font-size:12px;color:var(--text3);padding:8px 0">Populates automatically once previous round completes.</div>`;
-      } else {
-        html+=`<div class="setup-grid">`;
-        r.matchups.forEach((m,mi)=>{
-          const lockVal=m.lockTime?m.lockTime.slice(0,16):'';
-          const status=lockStatus(m);
-          html+=`<div class="setup-matchup"><div class="setup-matchup-title">${m.fav} vs ${m.dog}</div>`;
-          html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:6px">`;
-          if(m.winner) html+=`<span class="badge complete">&#10003; ${m.winner}</span>`;
-          else if(status==='locked') html+=`<span class="badge locked">Locked</span>`;
-          else if(m.lockTime) html+=`<span class="badge open">Open · locks ${formatLockTime(m.lockTime)}</span>`;
-          else html+=`<span class="badge open">No lock set</span>`;
-          html+=`</div>`;
-          html+=`<div class="input-row"><span class="input-label">Lock</span><input type="datetime-local" class="lock-in" value="${lockVal}" id="r${ri}s${mi}lock"></div>`;
-          html+=`<div class="input-row"><span class="input-label">Winner</span>`;
-          html+=`<button class="btn sm${m.winner===m.fav?' primary':''}" onclick="toggleWinner(${ri},${mi},'${esc(m.fav)}')">${m.fav}</button>`;
-          html+=`<button class="btn sm${m.winner===m.dog?' primary':''}" onclick="toggleWinner(${ri},${mi},'${esc(m.dog)}')">${m.dog}</button>`;
-          if(m.winner) html+=`<button class="btn sm" onclick="toggleWinner(${ri},${mi},'${esc(m.winner)}')" style="color:var(--text3)">clear</button>`;
-          html+=`</div></div>`;
-        });
-        html+=`</div>`;
-        html+=`<button class="btn primary" onclick="saveLockTimes(${ri})">Save lock times</button>`;
-      }
     }
+    html+=`</div>`;
+    html+=`<button class="btn primary" onclick="saveRoundMatchups(${ri})">Save ${ROUNDS[ri]}</button>`;
+    if(ri===0) html+=`<span style="font-size:11px;color:var(--text3);margin-left:8px">Saving Round 1 resets all later rounds and picks.</span>`;
     html+=`</div>`;
   }
   html+=`</div>`;
@@ -788,34 +752,41 @@ function removeParticipant(name){
   saveToBin(); render();
 }
 
-function saveR1Matchups(){
-  if(!confirm('Saving Round 1 matchups clears all picks and later rounds. Continue?')) return;
+function saveRoundMatchups(ri){
+  const maxSeries=ri===0?8:4;
   const matchups=[];
-  for(let mi=0;mi<8;mi++){
-    const t1=document.getElementById(`r0s${mi}t1`)?.value.trim();
-    const t2=document.getElementById(`r0s${mi}t2`)?.value.trim();
-    const s1=parseInt(document.getElementById(`r0s${mi}s1`)?.value)||0;
-    const s2=parseInt(document.getElementById(`r0s${mi}s2`)?.value)||0;
-    const lock=document.getElementById(`r0s${mi}lock`)?.value||null;
+  for(let mi=0;mi<maxSeries;mi++){
+    const t1=document.getElementById(`r${ri}s${mi}t1`)?.value.trim();
+    const t2=document.getElementById(`r${ri}s${mi}t2`)?.value.trim();
+    const s1=parseInt(document.getElementById(`r${ri}s${mi}s1`)?.value)||0;
+    const s2=parseInt(document.getElementById(`r${ri}s${mi}s2`)?.value)||0;
+    const lock=document.getElementById(`r${ri}s${mi}lock`)?.value||null;
     if(!t1||!t2) continue;
     let fav=t1,favSeed=s1,dog=t2,dogSeed=s2;
     if(s2>0&&s2<s1){fav=t2;favSeed=s2;dog=t1;dogSeed=s1;}
-    matchups.push({fav,favSeed,dog,dogSeed,winner:null,lockTime:lock||null});
+    // preserve existing winner if teams match
+    const ex=state.rounds[ri].matchups[matchups.length];
+    const winner=(ex&&ex.fav===fav&&ex.dog===dog)?ex.winner:null;
+    matchups.push({fav,favSeed,dog,dogSeed,winner,lockTime:lock||null});
   }
-  state.rounds=[{matchups,picks:{}},{matchups:[],picks:{}},{matchups:[],picks:{}},{matchups:[],picks:{}}];
-  state.cupPicks={};
-  state.participants.forEach(p=>{state.rounds[0].picks[p]=matchups.map(()=>null);});
+  if(ri===0){
+    if(!confirm('Saving Round 1 matchups clears all picks and later rounds. Continue?')) return;
+    state.rounds=[{matchups,picks:{}},{matchups:[],picks:{}},{matchups:[],picks:{}},{matchups:[],picks:{}}];
+    state.cupPicks={};
+    state.participants.forEach(p=>{state.rounds[0].picks[p]=matchups.map(()=>null);});
+  } else {
+    const existingPicks=state.rounds[ri].picks;
+    state.rounds[ri].matchups=matchups;
+    // preserve picks where participant arrays exist, extend if needed
+    state.participants.forEach(p=>{
+      if(!existingPicks[p]||existingPicks[p].length<matchups.length){
+        existingPicks[p]=(existingPicks[p]||[]);
+        while(existingPicks[p].length<matchups.length) existingPicks[p].push(null);
+      }
+    });
+    state.rounds[ri].picks=existingPicks;
+  }
   saveToBin(); render();
-}
-
-function saveLockTimes(ri){
-  state.rounds[ri].matchups.forEach((m,mi)=>{
-    const inp=document.getElementById(`r${ri}s${mi}lock`);
-    if(inp) m.lockTime=inp.value||null;
-  });
-  saveToBin();
-  const el=document.getElementById(`lock-saved-${ri}`);
-  renderAdmin(); // re-render to show updated statuses
 }
 
 async function forceSyncToBin(){
