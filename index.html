@@ -587,32 +587,54 @@ function getEliminatedTeams(){
 }
 
 function calcDetailedScore(p){
+  const SERIES_PER_ROUND=[8,4,2,1];
   let favPts=0,dogPts=0,potential=0;
   const byRound=[];
-  state.rounds.forEach((r,ri)=>{
-    let rFav=0,rDog=0,rPot=0;
-    r.matchups.forEach((m,mi)=>{
-      const pick=(r.picks[p]||[])[mi];
-      if(m.winner&&pick){
-        if(pick===m.winner){
-          const pts=m.winner===m.fav?SCORING[ri].fav:SCORING[ri].dog;
-          if(m.winner===m.fav) rFav+=pts; else rDog+=pts;
-        }
-      } else if(!m.winner&&pick){
-        // pending - count as potential
-        rPot+=pick===m.fav?SCORING[ri].fav:SCORING[ri].dog;
-      }
-    });
-    byRound.push({fav:rFav,dog:rDog,pot:rPot});
-    favPts+=rFav; dogPts+=rDog; potential+=rPot;
-  });
-  // cup potential
   const cw=getCupWinner();
   const cp=state.cupPicks[p];
   const elim=getEliminatedTeams();
-  const cupAlive=cp&&!cw&&!elim.has(cp);
+
+  state.rounds.forEach((r,ri)=>{
+    let rFav=0,rDog=0,rPot=0;
+    const numSeries=SERIES_PER_ROUND[ri];
+
+    // Score settled matchups and count potential for open ones
+    for(let mi=0;mi<numSeries;mi++){
+      const m=r.matchups[mi];
+      if(!m) {
+        // Future round series not yet set up — assume max (upset) points
+        rPot+=SCORING[ri].dog;
+        continue;
+      }
+      const pick=(r.picks[p]||[])[mi];
+      if(m.winner){
+        // Result is in — only score if pick matched
+        if(pick&&pick===m.winner){
+          const pts=m.winner===m.fav?SCORING[ri].fav:SCORING[ri].dog;
+          if(m.winner===m.fav) rFav+=pts; else rDog+=pts;
+        }
+        // no potential — series is done
+      } else {
+        // No result yet
+        if(pick){
+          // Pick made — use that pick's point value as potential
+          rPot+=pick===m.fav?SCORING[ri].fav:SCORING[ri].dog;
+        } else {
+          // No pick — assume upset (max possible)
+          rPot+=SCORING[ri].dog;
+        }
+      }
+    }
+
+    byRound.push({fav:rFav,dog:rDog,pot:rPot});
+    favPts+=rFav; dogPts+=rDog; potential+=rPot;
+  });
+
+  // Cup scoring and potential
   const cupPts=(cw&&cp===cw)?CUP_BONUS:0;
+  const cupAlive=cp&&!cw&&!elim.has(cp);
   const cupPot=cupAlive?CUP_BONUS:0;
+
   return{favPts,dogPts,cupPts,potential,cupPot,byRound,total:favPts+dogPts+cupPts};
 }
 
@@ -842,7 +864,7 @@ function renderAdmin(){
 
   for(let ri=0;ri<4;ri++){
     const r=state.rounds[ri];
-    const maxSeries=ri===0?8:4;
+    const maxSeries=[8,4,2,1][ri]||1;
     html+=`<div style="margin-bottom:20px">`;
     html+=`<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">${ROUNDS[ri]}</div>`;
     html+=`<div class="setup-grid">`;
@@ -936,7 +958,7 @@ function removeParticipant(name){
 }
 
 function saveRoundMatchups(ri){
-  const maxSeries=ri===0?8:4;
+  const maxSeries=[8,4,2,1][ri]||1;
   const matchups=[];
   for(let mi=0;mi<maxSeries;mi++){
     const t1=document.getElementById(`r${ri}s${mi}t1`)?.value.trim();
