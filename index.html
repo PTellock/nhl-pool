@@ -573,32 +573,215 @@ function renderBracket(){
 }
 
 /* ── Render standings ── */
-function renderStandings(){
-  const scored=state.participants.map(p=>({name:p,...calcScore(p)})).sort((a,b)=>b.total-a.total);
-  const maxPts=scored[0]?.total||1;
+function getEliminatedTeams(){
+  const elim=new Set();
+  state.rounds.forEach(r=>{
+    r.matchups.forEach(m=>{
+      if(m.winner){
+        if(m.winner!==m.fav) elim.add(m.fav);
+        if(m.winner!==m.dog) elim.add(m.dog);
+      }
+    });
+  });
+  return elim;
+}
+
+function calcDetailedScore(p){
+  let favPts=0,dogPts=0,potential=0;
+  const byRound=[];
+  state.rounds.forEach((r,ri)=>{
+    let rFav=0,rDog=0,rPot=0;
+    r.matchups.forEach((m,mi)=>{
+      const pick=(r.picks[p]||[])[mi];
+      if(m.winner&&pick){
+        if(pick===m.winner){
+          const pts=m.winner===m.fav?SCORING[ri].fav:SCORING[ri].dog;
+          if(m.winner===m.fav) rFav+=pts; else rDog+=pts;
+        }
+      } else if(!m.winner&&pick){
+        // pending - count as potential
+        rPot+=pick===m.fav?SCORING[ri].fav:SCORING[ri].dog;
+      }
+    });
+    byRound.push({fav:rFav,dog:rDog,pot:rPot});
+    favPts+=rFav; dogPts+=rDog; potential+=rPot;
+  });
+  // cup potential
   const cw=getCupWinner();
+  const cp=state.cupPicks[p];
+  const elim=getEliminatedTeams();
+  const cupAlive=cp&&!cw&&!elim.has(cp);
+  const cupPts=(cw&&cp===cw)?CUP_BONUS:0;
+  const cupPot=cupAlive?CUP_BONUS:0;
+  return{favPts,dogPts,cupPts,potential,cupPot,byRound,total:favPts+dogPts+cupPts};
+}
+
+function renderStandings(){
+  const scored=state.participants.map(p=>({name:p,...calcDetailedScore(p)})).sort((a,b)=>b.total-a.total);
+  const maxPts=Math.max(...scored.map(s=>s.total+s.potential+s.cupPot),1);
+  const cw=getCupWinner();
+  const elim=getEliminatedTeams();
   const activeRounds=state.rounds.filter(r=>r.matchups.length>0);
+
   let html=`<div class="metric-row">`;
   html+=`<div class="metric"><div class="metric-lbl">Participants</div><div class="metric-val">${state.participants.length}</div></div>`;
   html+=`<div class="metric"><div class="metric-lbl">Leader</div><div class="metric-val" style="font-size:16px">${scored[0]?.name||'—'}</div></div>`;
   html+=`<div class="metric"><div class="metric-lbl">Leader pts</div><div class="metric-val" style="color:var(--amber)">${scored[0]?.total||0}</div></div>`;
   if(cw) html+=`<div class="metric"><div class="metric-lbl">Champion</div><div class="metric-val" style="font-size:15px">${cw}</div></div>`;
-  html+=`</div><div class="standings-wrap"><table><thead><tr><th>#</th><th>Participant</th><th>Cup pick</th>`;
+  html+=`</div>`;
+
+  // Standings table
+  html+=`<div class="standings-wrap" style="margin-bottom:28px"><table><thead><tr><th>#</th><th>Participant</th><th>Cup pick</th>`;
   activeRounds.forEach(r=>{const ri=state.rounds.indexOf(r);html+=`<th style="text-align:center">R${ri+1}</th>`;});
   html+=`<th style="text-align:center">Cup</th><th style="text-align:center">Total</th></tr></thead><tbody>`;
   scored.forEach((p,i)=>{
-    const cp=state.cupPicks[p.name]||'—';
-    const cpOk=cw&&cp===cw;
+    const cp=state.cupPicks[p.name]||null;
+    const cpWon=cw&&cp===cw;
+    const cpElim=cp&&elim.has(cp);
+    const cpAlive=cp&&!cw&&!cpElim;
     const isMe=p.name===currentParticipant;
     html+=`<tr${isMe?' style="background:var(--blue-bg)"':''}>`;
-    html+=`<td style="font-size:11px;color:var(--text3)">${i+1}</td><td style="font-weight:500">${p.name}</td>`;
-    html+=`<td style="font-size:12px;${cpOk?'color:var(--amber);font-weight:500':''}">${cp}</td>`;
-    activeRounds.forEach(r=>{const ri=state.rounds.indexOf(r);html+=`<td class="pts">${p.byRound[ri]||0}</td>`;});
+    html+=`<td style="font-size:11px;color:var(--text3)">${i+1}</td>`;
+    html+=`<td style="font-weight:500">${p.name}</td>`;
+    // Cup pick with status
+    let cpDisplay='—';
+    if(cp){
+      if(cpWon) cpDisplay=`<span style="color:var(--amber);font-weight:500">&#127942; ${cp}</span>`;
+      else if(cpElim) cpDisplay=`<span style="color:var(--red);text-decoration:line-through;opacity:.6">${cp}</span>`;
+      else if(cpAlive) cpDisplay=`<span style="color:var(--green);font-weight:500">&#10003; ${cp}</span>`;
+      else cpDisplay=`<span style="color:var(--text2)">${cp}</span>`;
+    }
+    html+=`<td style="font-size:12px">${cpDisplay}</td>`;
+    activeRounds.forEach(r=>{
+      const ri=state.rounds.indexOf(r);
+      const rd=p.byRound[ri]||{fav:0,dog:0,pot:0};
+      html+=`<td class="pts">${rd.fav+rd.dog}</td>`;
+    });
     html+=`<td class="pts">${p.cupPts>0?'+'+p.cupPts:'—'}</td>`;
-    html+=`<td class="pts">${p.total}<div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(p.total/maxPts*100)}%"></div></div></td></tr>`;
+    // Total with potential
+    const pot=p.potential+p.cupPot;
+    html+=`<td class="pts">${p.total}${pot>0?` <span style="font-size:10px;color:var(--text3)">+${pot}?</span>`:''}`;
+    html+=`<div class="bar-wrap">`;
+    html+=`<div style="display:flex;height:3px;border-radius:2px;overflow:hidden">`;
+    const favW=Math.round(p.favPts/maxPts*100);
+    const dogW=Math.round(p.dogPts/maxPts*100);
+    const cupW=Math.round(p.cupPts/maxPts*100);
+    const potW=Math.round(pot/maxPts*100);
+    if(favW>0) html+=`<div style="width:${favW}%;background:#1565C0"></div>`;
+    if(dogW>0) html+=`<div style="width:${dogW}%;background:#2E7D32"></div>`;
+    if(cupW>0) html+=`<div style="width:${cupW}%;background:#B8860B"></div>`;
+    if(potW>0) html+=`<div style="width:${potW}%;background:var(--border2)"></div>`;
+    html+=`</div></div></td></tr>`;
   });
-  html+=`</tbody></table></div><div class="scoring-note">Scoring: R1 dog=3/fav=1 · R2 dog=2/fav=1 · R3+Final=1 each · Cup correct pick = +${CUP_BONUS} pts</div>`;
+  html+=`</tbody></table></div>`;
+
+  // Legend
+  html+=`<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--text2);margin-bottom:20px">`;
+  html+=`<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1565C0;display:inline-block"></span>Favorite pts</span>`;
+  html+=`<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#2E7D32;display:inline-block"></span>Upset pts</span>`;
+  html+=`<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#B8860B;display:inline-block"></span>Cup pts</span>`;
+  html+=`<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:var(--border2);display:inline-block"></span>Potential pts</span>`;
+  html+=`<span style="margin-left:8px">Cup: &#127942;=won &nbsp; <span style="color:var(--green)">&#10003;</span>=still alive &nbsp; <span style="color:var(--red);text-decoration:line-through">team</span>=eliminated</span>`;
+  html+=`</div>`;
+
+  // Charts
+  html+=`<div style="margin-bottom:28px">`;
+  html+=`<div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:12px">Points breakdown</div>`;
+  html+=`<div style="position:relative;width:100%;height:${Math.max(scored.length*40+60,200)}px"><canvas id="bar-chart" role="img" aria-label="Stacked bar chart showing points breakdown per participant"></canvas></div>`;
+  html+=`</div>`;
+  html+=`<div style="margin-bottom:28px">`;
+  html+=`<div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:12px">Cumulative points by round</div>`;
+  html+=`<div style="position:relative;width:100%;height:300px"><canvas id="line-chart" role="img" aria-label="Line chart showing cumulative points after each round"></canvas></div>`;
+  html+=`</div>`;
+  html+=`<div class="scoring-note">Scoring: R1 dog=3/fav=1 · R2 dog=2/fav=1 · R3+Final=1 each · Cup correct pick = +${CUP_BONUS} pts</div>`;
+
   document.getElementById('standings').innerHTML=html;
+
+  // Render charts after DOM update
+  setTimeout(()=>renderCharts(scored,activeRounds),50);
+}
+
+function renderCharts(scored,activeRounds){
+  if(typeof Chart==='undefined') return;
+
+  const isDark=matchMedia('(prefers-color-scheme:dark)').matches;
+  const textColor=isDark?'#a8a6a0':'#5f5e5a';
+  const gridColor=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.07)';
+
+  // Stacked horizontal bar chart
+  const barCtx=document.getElementById('bar-chart');
+  if(barCtx){
+    const labels=scored.map(s=>s.name);
+    const favData=scored.map(s=>s.favPts);
+    const dogData=scored.map(s=>s.dogPts);
+    const cupData=scored.map(s=>s.cupPts);
+    const potData=scored.map(s=>s.potential+s.cupPot);
+    new Chart(barCtx,{
+      type:'bar',
+      data:{
+        labels,
+        datasets:[
+          {label:'Favorite pts',data:favData,backgroundColor:'#1565C0',stack:'pts'},
+          {label:'Upset pts',data:dogData,backgroundColor:'#2E7D32',stack:'pts'},
+          {label:'Cup pts',data:cupData,backgroundColor:'#B8860B',stack:'pts'},
+          {label:'Potential',data:potData,backgroundColor:isDark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.08)',stack:'pts',borderWidth:0}
+        ]
+      },
+      options:{
+        indexAxis:'y',
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.x} pts`}}},
+        scales:{
+          x:{stacked:true,grid:{color:gridColor},ticks:{color:textColor,font:{size:11}}},
+          y:{stacked:true,grid:{display:false},ticks:{color:textColor,font:{size:11}}}
+        }
+      }
+    });
+  }
+
+  // Line chart - cumulative by round
+  const lineCtx=document.getElementById('line-chart');
+  if(lineCtx&&activeRounds.length>0){
+    const colors=['#1565C0','#2E7D32','#C62828','#B8860B','#7B3F9E','#0097A7','#E65100','#5D4037','#455A64','#E91E63','#33691E'];
+    const roundLabels=['Start',...activeRounds.map(r=>ROUNDS[state.rounds.indexOf(r)])];
+    const datasets=scored.map((p,i)=>({
+      label:p.name,
+      data:[0,...activeRounds.map(r=>{
+        const ri=state.rounds.indexOf(r);
+        let cum=0;
+        for(let j=0;j<=ri;j++){
+          const rd=p.byRound[j]||{fav:0,dog:0};
+          cum+=rd.fav+rd.dog;
+        }
+        if(ri===3&&p.cupPts) cum+=p.cupPts;
+        return cum;
+      })],
+      borderColor:colors[i%colors.length],
+      backgroundColor:colors[i%colors.length]+(isDark?'40':'20'),
+      borderWidth:2,
+      pointRadius:4,
+      pointHoverRadius:6,
+      tension:0.3,
+      fill:false
+    }));
+    new Chart(lineCtx,{
+      type:'line',
+      data:{labels:roundLabels,datasets},
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{
+          legend:{display:true,position:'right',labels:{color:textColor,font:{size:11},boxWidth:12,padding:8}},
+          tooltip:{mode:'index',intersect:false}
+        },
+        scales:{
+          x:{grid:{color:gridColor},ticks:{color:textColor,font:{size:11}}},
+          y:{grid:{color:gridColor},ticks:{color:textColor,font:{size:11}},beginAtZero:true}
+        }
+      }
+    });
+  }
 }
 
 /* ── Render cup ── */
@@ -858,5 +1041,6 @@ function startAutoRefresh(){
   startAutoRefresh();
 })();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </body>
 </html>
