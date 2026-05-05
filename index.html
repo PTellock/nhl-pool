@@ -264,23 +264,23 @@ let state = {
     },
     {
       matchups: [
-        {fav:'Avalanche',favSeed:1,dog:'Wild',dogSeed:4,winner:null,lockTime:null},
-        {fav:'Golden Knights',favSeed:2,dog:'Ducks',dogSeed:3,winner:null,lockTime:null},
-        {fav:'Sabres',favSeed:1,dog:'Canadiens',dogSeed:4,winner:null,lockTime:null},
-        {fav:'Hurricanes',favSeed:2,dog:'Flyers',dogSeed:3,winner:null,lockTime:null}
+        {fav:'Sabres',favSeed:2,dog:'Canadiens',dogSeed:5,winner:null,lockTime:null},
+        {fav:'Hurricanes',favSeed:2,dog:'Flyers',dogSeed:6,winner:null,lockTime:null},
+        {fav:'Avalanche',favSeed:1,dog:'Wild',dogSeed:7,winner:null,lockTime:null},
+        {fav:'Golden Knights',favSeed:3,dog:'Ducks',dogSeed:5,winner:null,lockTime:null}
       ],
       picks: {
-        'Alex':   ['Avalanche','Ducks','Sabres','Hurricanes'],
-        'Pete':   ['Avalanche','Golden Knights','Sabres','Hurricanes'],
-        'Mr Paul':['Wild','Golden Knights',null,'Hurricanes'],
-        'Nick':   ['Wild','Ducks','Sabres','Hurricanes'],
-        'Ryan':   ['Avalanche','Golden Knights','Sabres','Hurricanes'],
-        'Danielle':['Avalanche','Ducks','Canadiens','Hurricanes'],
-        'TBK':    ['Wild','Golden Knights',null,'Hurricanes'],
-        'Dave':   ['Wild','Ducks','Sabres','Flyers'],
-        'Maddie': ['Wild','Golden Knights','Canadiens','Hurricanes'],
-        'Sam':    ['Wild','Ducks',null,'Hurricanes'],
-        'Maegan': ['Wild','Ducks','Canadiens','Flyers']
+        'Alex':   ['Sabres','Hurricanes','Avalanche','Ducks'],
+        'Pete':   ['Sabres','Hurricanes','Avalanche','Golden Knights'],
+        'Mr Paul':[null,'Hurricanes','Wild','Golden Knights'],
+        'Nick':   ['Sabres','Hurricanes','Wild','Ducks'],
+        'Ryan':   ['Sabres','Hurricanes','Avalanche','Golden Knights'],
+        'Danielle':['Canadiens','Hurricanes','Avalanche','Ducks'],
+        'TBK':    [null,'Hurricanes','Wild','Golden Knights'],
+        'Dave':   ['Sabres','Flyers','Wild','Ducks'],
+        'Maddie': ['Canadiens','Hurricanes','Wild','Golden Knights'],
+        'Sam':    [null,'Hurricanes','Wild','Ducks'],
+        'Maegan': ['Canadiens','Flyers','Wild','Ducks']
       }
     },
     {matchups:[],picks:{}},
@@ -745,6 +745,11 @@ function renderAdmin(){
   html+=`<div class="info">This URL always loads the latest data. Share it with everyone — no account needed to view picks and standings.<br><br><span style="word-break:break-all;font-size:11px">${location.href}</span></div>`;
   html+=`<button class="btn" onclick="copyUrl()">Copy URL</button><span id="copy-confirm" style="font-size:12px;color:var(--green);margin-left:8px"></span></div>`;
 
+  /* Force sync */
+  html+=`<div class="setup-section"><div class="setup-label">Data sync</div>`;
+  html+=`<div class="info">If the live site is showing wrong data, use this to overwrite JSONBin with the data currently in this file. All picks and matchups will be replaced with what the code has.</div>`;
+  html+=`<button class="btn primary" onclick="forceSyncToBin()">Push file data to cloud</button><span id="sync-confirm" style="font-size:12px;color:var(--green);margin-left:8px"></span></div>`;
+
   /* Danger */
   html+=`<div class="setup-section"><div class="setup-label" style="color:var(--red)">Danger zone</div>`;
   html+=`<button class="btn danger" onclick="resetPool()">Reset entire pool</button></div>`;
@@ -811,6 +816,27 @@ function saveLockTimes(ri){
   saveToBin();
   const el=document.getElementById(`lock-saved-${ri}`);
   renderAdmin(); // re-render to show updated statuses
+}
+
+async function forceSyncToBin(){
+  if(!confirm('This will overwrite the cloud data with the data baked into this file. All current picks and matchups will be replaced. Continue?')) return;
+  setSyncStatus('saving');
+  try{
+    const res=await fetch(API_BASE,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
+      body:JSON.stringify(state)
+    });
+    if(!res.ok) throw new Error();
+    setSyncStatus('saved');
+    setTimeout(()=>setSyncStatus('idle'),2500);
+    const el=document.getElementById('sync-confirm');
+    if(el){el.textContent='Pushed successfully!';setTimeout(()=>el.textContent='',3000);}
+  }catch(e){
+    setSyncStatus('error');
+    const el=document.getElementById('sync-confirm');
+    if(el){el.textContent='Push failed — check console.';el.style.color='var(--red)';}
+  }
 }
 
 function resetPool(){
