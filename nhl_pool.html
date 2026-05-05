@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHL Playoff Pool</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#ffffff; --bg2:#f7f6f3; --bg3:#eeede9;
+    --text:#1a1a18; --text2:#5f5e5a; --text3:#9a9890;
+    --border:rgba(0,0,0,0.10); --border2:rgba(0,0,0,0.18);
+    --blue:#1565C0; --blue-bg:#E3F0FF;
+    --green:#2E7D32; --green-bg:#E8F5E9;
+    --red:#C62828; --red-bg:#FFEBEE;
+    --amber:#B8860B; --amber-bg:#FFF8E1;
+    --orange-bg:#FFF3E0; --orange:#E65100;
+    --radius:8px; --radius-lg:12px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#1e1e1c; --bg2:#272724; --bg3:#2e2e2b;
+      --text:#f0efea; --text2:#a8a6a0; --text3:#6a6864;
+      --border:rgba(255,255,255,0.10); --border2:rgba(255,255,255,0.18);
+      --blue:#90CAF9; --blue-bg:#0D2744;
+      --green:#81C784; --green-bg:#1B3E1E;
+      --red:#EF9A9A; --red-bg:#3E1A1A;
+      --amber:#FFD54F; --amber-bg:#3E3000;
+      --orange-bg:#3E2200; --orange:#FFB74D;
+    }
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg2);color:var(--text);font-size:14px;line-height:1.5;min-height:100vh}
+  .header{background:var(--bg);border-bottom:0.5px solid var(--border);position:sticky;top:0;z-index:100}
+  .header-inner{max-width:940px;margin:0 auto;padding:0 16px;display:flex;align-items:center;gap:12px;height:52px}
+  .header-title{font-size:16px;font-weight:500;flex:1}
+  .header-sub{font-size:12px;color:var(--text3)}
+  .role-badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:999px;border:0.5px solid var(--border2);cursor:pointer;color:var(--text2);background:var(--bg2);transition:all .12s}
+  .role-badge.admin{background:var(--amber-bg);color:var(--amber);border-color:var(--amber)}
+  .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:background .3s}
+  .sync-dot.saving{background:var(--amber)}
+  .sync-dot.saved{background:var(--green)}
+  .sync-dot.error{background:var(--red)}
+  .app{max-width:940px;margin:0 auto;padding:0 16px 60px}
+  .tabs{display:flex;gap:2px;padding:16px 0 0;border-bottom:0.5px solid var(--border);margin-bottom:20px;overflow-x:auto}
+  .tab{padding:6px 14px;border-radius:var(--radius) var(--radius) 0 0;font-size:13px;font-weight:500;cursor:pointer;border:0.5px solid transparent;border-bottom:none;color:var(--text2);background:transparent;white-space:nowrap;transition:all .12s}
+  .tab.active{background:var(--bg);color:var(--text);border-color:var(--border);border-bottom-color:var(--bg);margin-bottom:-0.5px}
+  .tab:hover:not(.active){color:var(--text)}
+  .section{display:none}.section.active{display:block}
+  .round-block{margin-bottom:28px}
+  .round-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .round-name{font-size:12px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+  .round-grid{display:grid;gap:8px}
+  .r1-grid{grid-template-columns:repeat(2,1fr)}
+  .r2-grid{grid-template-columns:repeat(2,1fr)}
+  .r3-grid{grid-template-columns:repeat(2,1fr)}
+  .rf-grid{grid-template-columns:1fr;max-width:360px}
+  @media(max-width:560px){.r1-grid,.r2-grid,.r3-grid{grid-template-columns:1fr}}
+  .matchup-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .team-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:0.5px solid var(--border);transition:background .1s}
+  .team-row:last-of-type{border-bottom:none}
+  .team-row.clickable{cursor:pointer}
+  .team-row.clickable:hover{background:var(--bg2)}
+  .team-row.winner{background:var(--green-bg)}
+  .team-row.winner .team-name{color:var(--green);font-weight:500}
+  .team-row.loser{opacity:.4}
+  .seed{font-size:10px;color:var(--text3);min-width:14px;text-align:right}
+  .team-name{font-size:13px;flex:1}
+  .dog-tag{font-size:9px;font-weight:500;padding:1px 5px;border-radius:999px;background:var(--orange-bg);color:var(--orange)}
+  .check{width:15px;height:15px;border-radius:50%;border:0.5px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .check.on{background:var(--green);border-color:var(--green)}
+  .check.on::after{content:'';display:block;width:5px;height:3px;border-left:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+  .picks-block{border-top:0.5px solid var(--border);padding:10px 10px 8px;background:var(--bg2)}
+  .pick-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+  .pick-name{font-size:11px;color:var(--text2);min-width:62px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pick-btn{padding:3px 9px;font-size:11px;border-radius:var(--radius);border:0.5px solid var(--border2);background:transparent;cursor:pointer;color:var(--text);transition:all .1s;white-space:nowrap;font-family:inherit}
+  .pick-btn:hover:not(:disabled){background:var(--bg3)}
+  .pick-btn.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+  .pick-btn.correct{background:var(--green);border-color:var(--green);color:#fff}
+  .pick-btn.wrong{background:var(--red);border-color:var(--red);color:#fff;text-decoration:line-through;opacity:.75}
+  .pick-btn:disabled{cursor:default}
+  .no-pick{font-size:10px;color:var(--text3)}
+  .missing-tag{font-size:9px;font-weight:500;padding:1px 5px;border-radius:999px;background:var(--orange-bg);color:var(--orange)}
+  .locked-note{font-size:10px;color:var(--text3)}
+  .standings-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:11px;font-weight:500;color:var(--text3);padding:6px 8px;border-bottom:0.5px solid var(--border);white-space:nowrap}
+  td{padding:8px 8px;border-bottom:0.5px solid var(--border);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  .pts{text-align:center;font-weight:500}
+  .bar-wrap{height:3px;background:var(--bg3);border-radius:2px;margin-top:3px}
+  .bar-fill{height:3px;background:var(--blue);border-radius:2px}
+  .cup-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+  .cup-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px}
+  .cup-pname{font-size:13px;font-weight:500;margin-bottom:6px}
+  .cup-team-btn{padding:3px 8px;font-size:11px;border-radius:var(--radius);border:0.5px solid var(--border2);background:transparent;cursor:pointer;color:var(--text);margin:2px;transition:all .1s;font-family:inherit;white-space:nowrap}
+  .cup-team-btn:hover:not(:disabled){background:var(--bg2)}
+  .cup-team-btn.sel{background:var(--blue);border-color:var(--blue);color:#fff}
+  .cup-team-btn.correct{background:var(--green);border-color:var(--green);color:#fff}
+  .cup-team-btn:disabled{cursor:default}
+  .setup-section{margin-bottom:24px}
+  .setup-label{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px}
+  .setup-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:10px}
+  .setup-matchup{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px}
+  .input-row{display:flex;gap:6px;align-items:center;margin-bottom:5px}
+  input[type=text],input[type=number],input[type=password]{padding:6px 10px;border-radius:var(--radius);border:0.5px solid var(--border2);background:var(--bg2);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .12s}
+  input:focus{border-color:var(--blue)}
+  .seed-in{width:44px}
+  .team-in{flex:1}
+  .participant-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+  .chip{display:flex;align-items:center;gap:4px;background:var(--bg2);border:0.5px solid var(--border2);border-radius:var(--radius);padding:4px 8px;font-size:12px}
+  .chip-x{background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;line-height:1;padding:0 2px}
+  .chip-x:hover{color:var(--red)}
+  .btn{padding:7px 16px;border-radius:var(--radius);border:0.5px solid var(--border2);background:transparent;color:var(--text);font-size:13px;cursor:pointer;font-family:inherit;transition:all .12s;margin-right:6px;margin-bottom:6px}
+  .btn:hover{background:var(--bg3)}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{opacity:.9}
+  .btn.danger{color:var(--red);border-color:var(--red)}
+  .btn.danger:hover{background:var(--red-bg)}
+  .info{background:var(--blue-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--text2);margin-bottom:12px}
+  .warn{background:var(--orange-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--orange);margin-bottom:12px}
+  .badge{display:inline-block;font-size:10px;font-weight:500;padding:2px 6px;border-radius:999px}
+  .badge.complete{background:var(--green-bg);color:var(--green)}
+  .badge.live{background:var(--blue-bg);color:var(--blue)}
+  .badge.gold{background:var(--amber-bg);color:var(--amber)}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:200}
+  .modal{background:var(--bg);border-radius:var(--radius-lg);border:0.5px solid var(--border2);padding:24px 28px;width:300px;max-width:90vw}
+  .modal-title{font-size:15px;font-weight:500;margin-bottom:14px}
+  .modal-sub{font-size:12px;color:var(--text2);margin-bottom:16px}
+  .modal-err{font-size:12px;color:var(--red);margin-top:8px;min-height:18px}
+  .metric-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:16px}
+  .metric{background:var(--bg2);border-radius:var(--radius);padding:10px 14px}
+  .metric-lbl{font-size:11px;color:var(--text3);margin-bottom:2px}
+  .metric-val{font-size:22px;font-weight:500}
+  .scoring-note{font-size:11px;color:var(--text3);margin-top:12px}
+  .loading{text-align:center;padding:60px 20px;color:var(--text3);font-size:14px}
+  .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:12px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="header-title" id="hdr-title">NHL Playoff Pool</div>
+    <span class="header-sub" id="hdr-status"></span>
+    <div class="sync-dot" id="sync-dot" title=""></div>
+    <button class="role-badge" id="role-btn" onclick="handleRoleClick()">Viewer</button>
+  </div>
+</div>
+
+<div class="app" style="padding-top:16px">
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('bracket')">Bracket &amp; picks</button>
+    <button class="tab" onclick="showTab('standings')">Standings</button>
+    <button class="tab" onclick="showTab('cup')">Cup picks</button>
+    <button class="tab admin-only" onclick="showTab('setup')" style="display:none">Setup</button>
+  </div>
+  <div id="bracket" class="section active"><div class="loading"><div class="spinner"></div><br>Loading pool data...</div></div>
+  <div id="standings" class="section"></div>
+  <div id="cup" class="section"></div>
+  <div id="setup" class="section"></div>
+</div>
+
+<div class="modal-bg" id="login-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-title">Admin login</div>
+    <div class="modal-sub">Enter the admin password to manage picks, results, and settings.</div>
+    <input type="password" id="pw-input" placeholder="Password" style="width:100%;margin-bottom:8px" onkeydown="if(event.key==='Enter')tryLogin()">
+    <button class="btn primary" onclick="tryLogin()" style="width:100%;margin-right:0">Sign in</button>
+    <div class="modal-err" id="pw-err"></div>
+    <button class="btn" onclick="closeLogin()" style="width:100%;margin-top:6px;margin-right:0">Cancel</button>
+  </div>
+</div>
+
+<script>
+const BIN_ID     = '69fa03d836566621a82a4348';
+const MASTER_KEY = '$2a$10$YhJPSy4Yjsu5sw.cfNnZI.9nQco4kR5JLBYCTwEoGAPSVPQrLqBJu';
+const ACCESS_KEY = '$2a$10$n7T5OjO5PnOP3I8YZINO3elqAj6FvjF8Naky83bxTrRTDyL692tU2';
+const API_BASE   = 'https://api.jsonbin.io/v3/b/' + BIN_ID;
+const ADMIN_HASH = '0665853486763ba8c033a7aa28f793421549c4944c60a44fd2e6db3469f8cb3e';
+
+const ROUNDS  = ['Round 1','Round 2','Round 3','Stanley Cup Final'];
+const SCORING = [{fav:1,dog:3},{fav:1,dog:2},{fav:1,dog:1},{fav:1,dog:1}];
+const CUP_BONUS = 10;
+
+let isAdmin = false;
+
+async function sha256(msg){
+  const buf = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(msg));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+let state = {
+  title:'NHL Playoff Pool 2025',
+  participants:['Alex','Pete','Mr Paul','Nick','Ryan','Danielle','TBK','Dave','Maddie','Sam','Maegan'],
+  cupPicks:{'Alex':'Avalanche','Pete':'Avalanche','Mr Paul':'Hurricanes','Nick':'Wild','Ryan':'Avalanche','Danielle':'Hurricanes','TBK':'Hurricanes','Dave':'Wild','Maddie':'Wild','Sam':'Hurricanes','Maegan':'Stars'},
+  rounds:[
+    {
+      matchups:[
+        {fav:'Hurricanes',favSeed:1,dog:'Senators',dogSeed:8,winner:'Hurricanes'},
+        {fav:'Sabres',favSeed:2,dog:'Bruins',dogSeed:7,winner:'Sabres'},
+        {fav:'Penguins',favSeed:3,dog:'Flyers',dogSeed:6,winner:'Flyers'},
+        {fav:'Lightning',favSeed:4,dog:'Canadiens',dogSeed:5,winner:'Canadiens'},
+        {fav:'Avalanche',favSeed:1,dog:'Kings',dogSeed:8,winner:'Avalanche'},
+        {fav:'Stars',favSeed:2,dog:'Wild',dogSeed:7,winner:'Wild'},
+        {fav:'Golden Knights',favSeed:3,dog:'Mammoth',dogSeed:6,winner:'Golden Knights'},
+        {fav:'Oilers',favSeed:4,dog:'Ducks',dogSeed:5,winner:'Ducks'}
+      ],
+      picks:{
+        'Alex':   ['Hurricanes','Bruins','Penguins','Canadiens','Avalanche','Stars','Golden Knights','Ducks'],
+        'Pete':   ['Hurricanes','Sabres','Penguins','Canadiens','Avalanche','Wild','Golden Knights','Oilers'],
+        'Mr Paul':['Hurricanes','Sabres','Penguins','Canadiens','Avalanche','Wild','Golden Knights','Oilers'],
+        'Nick':   ['Hurricanes','Sabres','Penguins','Canadiens','Avalanche','Wild','Golden Knights','Oilers'],
+        'Ryan':   ['Hurricanes','Bruins','Penguins','Canadiens','Avalanche','Stars','Golden Knights','Ducks'],
+        'Danielle':['Hurricanes','Bruins','Flyers','Lightning','Avalanche','Wild','Golden Knights','Oilers'],
+        'TBK':    ['Hurricanes','Bruins','Penguins','Lightning','Avalanche','Wild','Golden Knights','Ducks'],
+        'Dave':   ['Hurricanes','Bruins','Penguins','Lightning','Avalanche','Wild','Golden Knights','Ducks'],
+        'Maddie': ['Hurricanes','Sabres','Penguins','Lightning','Avalanche','Wild','Golden Knights','Oilers'],
+        'Sam':    ['Hurricanes','Bruins','Penguins','Lightning','Avalanche','Wild','Golden Knights','Oilers'],
+        'Maegan': ['Hurricanes','Bruins','Flyers','Lightning','Kings','Stars','Golden Knights','Oilers']
+      }
+    },
+    {
+      matchups:[
+        {fav:'Avalanche',favSeed:1,dog:'Wild',dogSeed:4,winner:null},
+        {fav:'Golden Knights',favSeed:2,dog:'Ducks',dogSeed:3,winner:null},
+        {fav:'Sabres',favSeed:1,dog:'Canadiens',dogSeed:4,winner:null},
+        {fav:'Hurricanes',favSeed:2,dog:'Flyers',dogSeed:3,winner:null}
+      ],
+      picks:{
+        'Alex':   ['Avalanche','Ducks','Sabres','Hurricanes'],
+        'Pete':   ['Avalanche','Golden Knights','Sabres','Hurricanes'],
+        'Mr Paul':['Wild','Golden Knights',null,'Hurricanes'],
+        'Nick':   ['Wild','Ducks','Sabres','Hurricanes'],
+        'Ryan':   ['Avalanche','Golden Knights','Sabres','Hurricanes'],
+        'Danielle':['Avalanche','Ducks','Canadiens','Hurricanes'],
+        'TBK':    ['Wild','Golden Knights',null,'Hurricanes'],
+        'Dave':   ['Wild','Ducks','Sabres','Flyers'],
+        'Maddie': ['Wild','Golden Knights','Canadiens','Hurricanes'],
+        'Sam':    ['Wild','Ducks',null,'Hurricanes'],
+        'Maegan': ['Wild','Ducks','Canadiens','Flyers']
+      }
+    },
+    {matchups:[],picks:{}},
+    {matchups:[],picks:{}}
+  ]
+};
+
+function setSyncStatus(s){
+  const d=document.getElementById('sync-dot');
+  d.className='sync-dot'+(s!=='idle'?' '+s:'');
+  d.title=s==='saving'?'Saving...' : s==='saved'?'Saved' : s==='error'?'Save failed':'';
+}
+
+async function loadFromBin(){
+  try{
+    const res=await fetch(API_BASE+'/latest',{headers:{'X-Access-Key':ACCESS_KEY}});
+    if(!res.ok) throw new Error('fetch failed');
+    const data=await res.json();
+    if(data.record && data.record.participants) state=data.record;
+    else await saveToBin();
+  }catch(e){ setSyncStatus('error'); console.error('Load failed',e); }
+}
+
+let saveTimer=null;
+async function saveToBin(){
+  if(!isAdmin) return;
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{
+    setSyncStatus('saving');
+    try{
+      const res=await fetch(API_BASE,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
+        body:JSON.stringify(state)
+      });
+      if(!res.ok) throw new Error('save failed');
+      setSyncStatus('saved');
+      setTimeout(()=>setSyncStatus('idle'),2500);
+    }catch(e){ setSyncStatus('error'); console.error('Save failed',e); }
+  },600);
+}
+
+function handleRoleClick(){
+  if(isAdmin){
+    isAdmin=false;
+    document.getElementById('role-btn').textContent='Viewer';
+    document.getElementById('role-btn').classList.remove('admin');
+    document.querySelectorAll('.admin-only').forEach(el=>el.style.display='none');
+    render();
+  } else {
+    document.getElementById('login-modal').style.display='flex';
+    setTimeout(()=>document.getElementById('pw-input').focus(),50);
+  }
+}
+function closeLogin(){
+  document.getElementById('login-modal').style.display='none';
+  document.getElementById('pw-err').textContent='';
+  document.getElementById('pw-input').value='';
+}
+async function tryLogin(){
+  const pw=document.getElementById('pw-input').value;
+  const h=await sha256(pw);
+  if(h===ADMIN_HASH){
+    isAdmin=true;
+    document.getElementById('role-btn').textContent='Admin';
+    document.getElementById('role-btn').classList.add('admin');
+    document.querySelectorAll('.admin-only').forEach(el=>el.style.display='');
+    closeLogin(); render();
+  } else {
+    document.getElementById('pw-err').textContent='Incorrect password.';
+  }
+}
+
+function isMatchupLocked(ri,mi){
+  if(state.rounds[ri].matchups[mi].winner) return true;
+  if(ri>0){
+    const prev=state.rounds[ri-1];
+    if(prev.matchups.length>0 && prev.matchups.every(m=>m.winner)) return true;
+  }
+  return false;
+}
+
+function inferNextRound(ri){
+  if(ri>=3) return;
+  const curr=state.rounds[ri], next=state.rounds[ri+1];
+  if(curr.matchups.length===0 || !curr.matchups.every(m=>m.winner)) return;
+  const newM=[];
+  const winners=curr.matchups.map(m=>m.winner);
+  for(let i=0;i<winners.length;i+=2){
+    if(i+1>=winners.length) break;
+    const [t1,t2]=[winners[i],winners[i+1]];
+    const s1=curr.matchups[i].winner===curr.matchups[i].fav?curr.matchups[i].favSeed:curr.matchups[i].dogSeed;
+    const s2=curr.matchups[i+1].winner===curr.matchups[i+1].fav?curr.matchups[i+1].favSeed:curr.matchups[i+1].dogSeed;
+    let fav=t1,favSeed=s1,dog=t2,dogSeed=s2;
+    if(s2<s1){fav=t2;favSeed=s2;dog=t1;dogSeed=s1;}
+    const ex=next.matchups[newM.length];
+    newM.push(ex&&ex.fav===fav&&ex.dog===dog?ex:{fav,favSeed,dog,dogSeed,winner:null});
+  }
+  const key=arr=>arr.map(m=>m.fav+'|'+m.dog).join(',');
+  if(key(next.matchups)!==key(newM)){
+    next.matchups=newM; next.picks={};
+    state.participants.forEach(p=>{next.picks[p]=newM.map(()=>null);});
+  } else {
+    state.participants.forEach(p=>{if(!next.picks[p])next.picks[p]=newM.map(()=>null);});
+  }
+}
+
+function getAllTeams(){
+  const t=new Set();
+  state.rounds[0].matchups.forEach(m=>{t.add(m.fav);t.add(m.dog);});
+  return [...t].sort();
+}
+
+function calcScore(p){
+  let total=0; const byRound=[];
+  state.rounds.forEach((r,ri)=>{
+    let rPts=0;
+    r.matchups.forEach((m,mi)=>{
+      const pick=(r.picks[p]||[])[mi];
+      if(m.winner&&pick&&pick===m.winner) rPts+=m.winner===m.fav?SCORING[ri].fav:SCORING[ri].dog;
+    });
+    byRound.push(rPts); total+=rPts;
+  });
+  const cw=getCupWinner();
+  const cupPts=(cw&&state.cupPicks[p]===cw)?CUP_BONUS:0;
+  return{total:total+cupPts,byRound,cupPts};
+}
+
+function getCupWinner(){
+  const r=state.rounds[3];
+  return r.matchups.length>0&&r.matchups[0]?.winner?r.matchups[0].winner:null;
+}
+
+function toggleWinner(ri,mi,team){
+  if(!isAdmin) return;
+  const m=state.rounds[ri].matchups[mi];
+  m.winner=m.winner===team?null:team;
+  saveToBin(); render();
+}
+
+function setPick(ri,mi,p,team){
+  if(!isAdmin||isMatchupLocked(ri,mi)) return;
+  if(!state.rounds[ri].picks[p]) state.rounds[ri].picks[p]=state.rounds[ri].matchups.map(()=>null);
+  const cur=state.rounds[ri].picks[p][mi];
+  state.rounds[ri].picks[p][mi]=cur===team?null:team;
+  saveToBin(); render();
+}
+
+function setCupPick(p,team){
+  if(!isAdmin||getCupWinner()) return;
+  state.cupPicks[p]=state.cupPicks[p]===team?null:team;
+  saveToBin(); renderCup(); renderStandings();
+}
+
+function setCupWinner(team){
+  if(!isAdmin) return;
+  const r=state.rounds[3];
+  if(r.matchups.length>0&&r.matchups[0]) r.matchups[0].winner=r.matchups[0].winner===team?null:team;
+  saveToBin(); render();
+}
+
+function renderBracket(){
+  for(let ri=0;ri<4;ri++) inferNextRound(ri);
+  const gridClass=['r1-grid','r2-grid','r3-grid','rf-grid'];
+  let html='';
+  for(let ri=0;ri<4;ri++){
+    const r=state.rounds[ri];
+    if(ri>0&&r.matchups.length===0) continue;
+    const allWon=r.matchups.length>0&&r.matchups.every(m=>m.winner);
+    const anyWon=r.matchups.some(m=>m.winner);
+    html+=`<div class="round-block"><div class="round-header"><span class="round-name">${ROUNDS[ri]}</span>`;
+    if(allWon) html+=`<span class="badge complete">complete</span>`;
+    else if(anyWon) html+=`<span class="badge live">in progress</span>`;
+    html+=`</div><div class="round-grid ${gridClass[ri]}">`;
+    if(r.matchups.length===0){
+      html+=`<div style="color:var(--text3);font-size:12px;padding:8px;grid-column:1/-1">Matchups appear automatically once all previous results are entered.</div>`;
+    }
+    r.matchups.forEach((m,mi)=>{
+      const locked=isMatchupLocked(ri,mi);
+      const favW=m.winner===m.fav, dogW=m.winner===m.dog;
+      const esc=s=>s.replace(/'/g,"\\'");
+      html+=`<div class="matchup-card">`;
+      html+=`<div class="team-row${favW?' winner':m.winner&&!favW?' loser':''}${isAdmin?' clickable':''}" onclick="toggleWinner(${ri},${mi},'${esc(m.fav)}')">`;
+      html+=`<span class="seed">${m.favSeed}</span><span class="team-name">${m.fav}</span><div class="check${favW?' on':''}"></div></div>`;
+      html+=`<div class="team-row${dogW?' winner':m.winner&&!dogW?' loser':''}${isAdmin?' clickable':''}" onclick="toggleWinner(${ri},${mi},'${esc(m.dog)}')">`;
+      html+=`<span class="seed">${m.dogSeed}</span><span class="team-name">${m.dog}</span><span class="dog-tag">dog</span><div class="check${dogW?' on':''}"></div></div>`;
+      html+=`<div class="picks-block">`;
+      state.participants.forEach(p=>{
+        const picks=r.picks[p]||[];
+        const pick=picks[mi];
+        const correct=m.winner&&pick&&pick===m.winner;
+        const wrong=m.winner&&pick&&pick!==m.winner;
+        const canEdit=isAdmin&&!locked;
+        const btnCls=team=>pick===team?(correct?'correct':wrong?'wrong':'sel'):'';
+        html+=`<div class="pick-row"><span class="pick-name" title="${p}">${p}</span>`;
+        html+=`<button class="pick-btn ${btnCls(m.fav)}" onclick="setPick(${ri},${mi},'${esc(p)}','${esc(m.fav)}')" ${!canEdit?'disabled':''}>${m.fav}</button>`;
+        html+=`<button class="pick-btn ${btnCls(m.dog)}" onclick="setPick(${ri},${mi},'${esc(p)}','${esc(m.dog)}')" ${!canEdit?'disabled':''}>${m.dog}</button>`;
+        if(!pick&&isAdmin&&!locked) html+=`<span class="missing-tag">no pick</span>`;
+        else if(!pick&&locked) html+=`<span class="no-pick">—</span>`;
+        else if(locked&&!m.winner) html+=`<span class="locked-note">pending</span>`;
+        html+=`</div>`;
+      });
+      html+=`</div></div>`;
+    });
+    html+=`</div></div>`;
+  }
+  document.getElementById('bracket').innerHTML=html;
+  updateHeader();
+}
+
+function renderStandings(){
+  const scored=state.participants.map(p=>({name:p,...calcScore(p)})).sort((a,b)=>b.total-a.total);
+  const maxPts=scored[0]?.total||1;
+  const cw=getCupWinner();
+  const activeRounds=state.rounds.filter(r=>r.matchups.length>0);
+  let html=`<div class="metric-row">`;
+  html+=`<div class="metric"><div class="metric-lbl">Participants</div><div class="metric-val">${state.participants.length}</div></div>`;
+  html+=`<div class="metric"><div class="metric-lbl">Leader</div><div class="metric-val" style="font-size:16px">${scored[0]?.name||'—'}</div></div>`;
+  html+=`<div class="metric"><div class="metric-lbl">Leader pts</div><div class="metric-val" style="color:var(--amber)">${scored[0]?.total||0}</div></div>`;
+  if(cw) html+=`<div class="metric"><div class="metric-lbl">Champion</div><div class="metric-val" style="font-size:15px">${cw}</div></div>`;
+  html+=`</div><div class="standings-wrap"><table><thead><tr><th>#</th><th>Participant</th><th>Cup pick</th>`;
+  activeRounds.forEach(r=>{const ri=state.rounds.indexOf(r);html+=`<th style="text-align:center">R${ri+1}</th>`;});
+  html+=`<th style="text-align:center">Cup</th><th style="text-align:center">Total</th></tr></thead><tbody>`;
+  scored.forEach((p,i)=>{
+    const cp=state.cupPicks[p.name]||'—';
+    const cpOk=cw&&cp===cw;
+    html+=`<tr><td style="font-size:11px;color:var(--text3)">${i+1}</td><td style="font-weight:500">${p.name}</td>`;
+    html+=`<td style="font-size:12px;${cpOk?'color:var(--amber);font-weight:500':''}">${cp}</td>`;
+    activeRounds.forEach(r=>{const ri=state.rounds.indexOf(r);html+=`<td class="pts">${p.byRound[ri]||0}</td>`;});
+    html+=`<td class="pts">${p.cupPts>0?'+'+p.cupPts:'—'}</td>`;
+    html+=`<td class="pts">${p.total}<div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(p.total/maxPts*100)}%"></div></div></td></tr>`;
+  });
+  html+=`</tbody></table></div><div class="scoring-note">Scoring: R1 dog=3/fav=1 · R2 dog=2/fav=1 · R3+Final=1 each · Cup correct pick = +${CUP_BONUS} pts</div>`;
+  document.getElementById('standings').innerHTML=html;
+}
+
+function renderCup(){
+  const teams=getAllTeams();
+  const cw=getCupWinner();
+  const esc=s=>s.replace(/'/g,"\\'");
+  let html='';
+  if(cw) html+=`<div class="info">Champion: <strong>${cw}</strong> — +${CUP_BONUS} pts awarded to correct picks.</div>`;
+  else html+=`<div class="info">Cup champion picks lock once a winner is set. Admin sets the champion when determined.</div>`;
+  if(isAdmin){
+    html+=`<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px">Set cup champion</div><div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">`;
+    teams.forEach(t=>{html+=`<button class="cup-team-btn${cw===t?' correct':''}" onclick="setCupWinner('${esc(t)}')">${t}</button>`;});
+    if(cw) html+=`<button class="cup-team-btn" onclick="setCupWinner(null)" style="color:var(--text3)">clear</button>`;
+    html+=`</div></div>`;
+  }
+  html+=`<div style="font-size:12px;font-weight:500;color:var(--text2);margin-bottom:10px">Participant picks</div><div class="cup-grid">`;
+  state.participants.forEach(p=>{
+    const pick=state.cupPicks[p]||null;
+    const correct=cw&&pick===cw;
+    const canEdit=isAdmin&&!cw;
+    html+=`<div class="cup-card"><div class="cup-pname">${p}${correct?` <span class="badge gold">+${CUP_BONUS}</span>`:''}</div><div>`;
+    teams.forEach(t=>{
+      const sel=pick===t;
+      html+=`<button class="cup-team-btn${sel?(correct?' correct':' sel'):''}" onclick="setCupPick('${esc(p)}','${esc(t)}')" ${!canEdit?'disabled':''}>${t}</button>`;
+    });
+    html+=`</div></div>`;
+  });
+  html+=`</div>`;
+  document.getElementById('cup').innerHTML=html;
+}
+
+function renderSetup(){
+  if(!isAdmin){document.getElementById('setup').innerHTML=`<div class="warn">Admin access required.</div>`;return;}
+  const esc=s=>s.replace(/'/g,"\\'");
+  let html='';
+  html+=`<div class="setup-section"><div class="setup-label">Pool title</div><div style="display:flex;gap:8px;align-items:center"><input type="text" id="pool-title-in" value="${state.title||''}" style="width:240px"><button class="btn primary" onclick="saveTitle()">Save</button></div></div>`;
+  html+=`<div class="setup-section"><div class="setup-label">Participants</div><div class="participant-chips">`;
+  state.participants.forEach(p=>{html+=`<span class="chip">${p}<button class="chip-x" onclick="removeParticipant('${esc(p)}')">×</button></span>`;});
+  html+=`</div><div class="input-row"><input type="text" id="new-p" placeholder="Add participant..." style="width:180px" onkeydown="if(event.key==='Enter')addParticipant()"><button class="btn primary" onclick="addParticipant()">Add</button></div></div>`;
+  html+=`<div class="setup-section"><div class="setup-label">Round 1 matchups</div><div class="info">Enter both teams and seeds (lower = favorite). Saving clears all picks and results — only use at the start of a new playoffs.</div><div class="setup-grid">`;
+  for(let mi=0;mi<8;mi++){
+    const m=state.rounds[0].matchups[mi]||{fav:'',favSeed:'',dog:'',dogSeed:''};
+    html+=`<div class="setup-matchup"><div style="font-size:11px;color:var(--text3);margin-bottom:6px">Series ${mi+1}</div>`;
+    html+=`<div class="input-row"><input type="number" class="seed-in" min="1" max="8" value="${m.favSeed||''}" placeholder="#" id="s${mi}s1"><input type="text" class="team-in" value="${m.fav||''}" placeholder="Team" id="s${mi}t1"></div>`;
+    html+=`<div class="input-row"><input type="number" class="seed-in" min="1" max="8" value="${m.dogSeed||''}" placeholder="#" id="s${mi}s2"><input type="text" class="team-in" value="${m.dog||''}" placeholder="Team" id="s${mi}t2"></div></div>`;
+  }
+  html+=`</div><button class="btn primary" onclick="saveMatchups()">Save Round 1 matchups</button></div>`;
+  html+=`<div class="setup-section"><div class="setup-label">Share</div><div class="info">Share this URL with your pool — it always loads the latest data from the cloud. No account needed to view.<br><br><span style="word-break:break-all;font-size:11px">${location.href}</span></div><button class="btn" onclick="copyUrl()">Copy URL</button><span id="copy-confirm" style="font-size:12px;color:var(--green);margin-left:8px"></span></div>`;
+  html+=`<div class="setup-section"><div class="setup-label" style="color:var(--red)">Danger zone</div><button class="btn danger" onclick="resetPool()">Reset entire pool</button></div>`;
+  document.getElementById('setup').innerHTML=html;
+}
+
+function saveTitle(){
+  const v=document.getElementById('pool-title-in')?.value.trim();
+  if(v){state.title=v;saveToBin();updateHeader();}
+}
+function copyUrl(){
+  navigator.clipboard.writeText(location.href).then(()=>{
+    const el=document.getElementById('copy-confirm');
+    if(el){el.textContent='Copied!';setTimeout(()=>el.textContent='',2500);}
+  });
+}
+function addParticipant(){
+  const inp=document.getElementById('new-p');
+  const name=inp?.value.trim();
+  if(!name||state.participants.includes(name)) return;
+  state.participants.push(name);
+  state.rounds.forEach(r=>{if(!r.picks[name])r.picks[name]=r.matchups.map(()=>null);});
+  inp.value='';
+  saveToBin(); render();
+}
+function removeParticipant(name){
+  if(!confirm(`Remove ${name}? This deletes all their picks.`)) return;
+  state.participants=state.participants.filter(p=>p!==name);
+  state.rounds.forEach(r=>{delete r.picks[name];});
+  delete state.cupPicks[name];
+  saveToBin(); render();
+}
+function saveMatchups(){
+  if(!confirm('Saving new matchups clears all picks and results. Continue?')) return;
+  const matchups=[];
+  for(let mi=0;mi<8;mi++){
+    const t1=document.getElementById(`s${mi}t1`)?.value.trim();
+    const t2=document.getElementById(`s${mi}t2`)?.value.trim();
+    const s1=parseInt(document.getElementById(`s${mi}s1`)?.value)||0;
+    const s2=parseInt(document.getElementById(`s${mi}s2`)?.value)||0;
+    if(!t1||!t2) continue;
+    let fav=t1,favSeed=s1,dog=t2,dogSeed=s2;
+    if(s2>0&&s2<s1){fav=t2;favSeed=s2;dog=t1;dogSeed=s1;}
+    matchups.push({fav,favSeed,dog,dogSeed,winner:null});
+  }
+  state.rounds=[{matchups,picks:{}},{matchups:[],picks:{}},{matchups:[],picks:{}},{matchups:[],picks:{}}];
+  state.cupPicks={};
+  state.participants.forEach(p=>{state.rounds[0].picks[p]=matchups.map(()=>null);});
+  saveToBin(); render();
+}
+function resetPool(){
+  if(!confirm('This deletes ALL picks, results, and matchups. Are you sure?')) return;
+  state.rounds=[{matchups:[],picks:{}},{matchups:[],picks:{}},{matchups:[],picks:{}},{matchups:[],picks:{}}];
+  state.cupPicks={};
+  saveToBin(); render();
+}
+
+function updateHeader(){
+  document.getElementById('hdr-title').textContent=state.title||'NHL Playoff Pool';
+  document.title=state.title||'NHL Playoff Pool';
+  const ri=state.rounds.findIndex(r=>r.matchups.length>0&&!r.matchups.every(m=>m.winner));
+  const cw=getCupWinner();
+  document.getElementById('hdr-status').textContent=cw?'Champion crowned':ri>=0?ROUNDS[ri]+' in progress':'';
+}
+
+function showTab(id){
+  document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',['bracket','standings','cup','setup'][i]===id);});
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='setup') renderSetup();
+}
+
+function render(){
+  renderBracket(); renderStandings(); renderCup();
+  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin?'':'none');
+  if(document.getElementById('setup').classList.contains('active')) renderSetup();
+}
+
+function startAutoRefresh(){
+  setInterval(async()=>{
+    if(isAdmin) return;
+    await loadFromBin(); render();
+  },60000);
+}
+
+(async()=>{
+  await loadFromBin();
+  render();
+  startAutoRefresh();
+})();
+</script>
+</body>
+</html>
